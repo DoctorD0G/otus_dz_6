@@ -1,6 +1,8 @@
+from sqlalchemy.orm import Session
 from abc import ABC, abstractmethod
 from typing import List
 from domain.models import Product, Order
+from infrastructure.repositories import SqlAlchemyProductRepository, SqlAlchemyOrderRepository
 
 
 class UnitOfWork(ABC):
@@ -89,6 +91,35 @@ class WarehouseUnitOfWork(UnitOfWork):
         self.session = self.session_factory()
         self.product_repository = SQLProductRepository(self.session)
         self.order_repository = SQLOrderRepository(self.session)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self.rollback()
+        elif not self.committed:
+            self.commit()
+        self.session.close()
+
+    def commit(self):
+        try:
+            self.session.commit()
+            self.committed = True
+        except Exception as e:
+            self.rollback()
+            raise e
+
+    def rollback(self):
+        self.session.rollback()
+
+
+class SqlAlchemyUnitOfWork(UnitOfWork):
+    def __init__(self, session: Session):
+        self.session = session
+        self.product_repository = SqlAlchemyProductRepository(self.session)
+        self.order_repository = SqlAlchemyOrderRepository(self.session)
+        self.committed = False
+
+    def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
